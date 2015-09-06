@@ -1,0 +1,91 @@
+---
+- hosts: all
+
+  vars:
+    timezone: 'Asia/Shanghai'
+
+  tasks:
+    - name: "Check current timezone"
+      shell: cat /etc/timezone
+      register: current_timezone
+      changed_when: False
+
+    - name: "Set Asia/Shanghai timezone"
+      file: src=/usr/share/zoneinfo/{{ timezone }}
+            dest=/etc/localtime
+            state=link
+            force=yes
+      when: current_timezone.stdout != '{{ timezone }}'
+      become: yes
+
+    - name: "Update APT Source List"
+      copy: src="etc/apt/sources.list"
+            dest="/etc/apt/sources.list"
+      become: yes
+
+    - name: "Install Dependendies"
+      apt: pkg={{item}}
+           update_cache=yes
+           cache_valid_time=3600
+      with_items:
+        - libxml2
+        - ca-certificates
+        - dnsmasq
+        - traceroute
+      become: yes
+
+    - name: "Configure dnsmasq.conf"
+      copy: src=etc/dnsmasq.conf dest=/etc/dnsmasq.conf
+      become: yes
+    - name: "Configure dnsmasq.d"
+      copy: src=etc/dnsmasq.d/ dest=/etc/dnsmasq.d/
+      become: yes
+    - name: "Restart dnsmasq"
+      service: name=dnsmasq state=restarted
+      become: yes
+    - name: "Add resolv.conf"
+      copy: src="etc/resolv.conf" dest="/etc/resolv.conf.tmpl"
+      become: yes
+
+    - name: "Enable IP Forwarding"
+      sysctl: name="net.ipv4.ip_forward" value=1 sysctl_set=yes state=present reload=yes
+      become: yes
+
+    - name: "Install Cisco Anyconnect"
+      script: anyconnect_packages/anyconnect-linux-64-4.1.04011-k9-vpnsetup.sh
+              creates=/opt/cisco
+      become: yes
+
+    - name: "Check whether CA certs are broken"
+      stat: path=/opt/.cisco/certificates/ca
+      register: ca_dir
+      changed_when: False
+    - name: "Fix broken CA certs"
+      shell: "{{ item }}"
+      with_items:
+        - mv /opt/.cisco/certificates/ca/*.pem /etc/ssl/certs
+        - rm -r /opt/.cisco/certificates/ca
+        - ln -sf /etc/ssl/certs /opt/.cisco/certificates/ca
+      when: ca_dir.stat.islnk is not defined or ca_dir.stat.islnk == False
+      become: yes
+
+    - name: "Hack vpnagentd"
+      script: anyconnect_packages/hack_router.sh
+              creates=/opt/cisco/anyconnect/lib/libhack.so
+      become: yes
+
+    - name: "Add APNIC CN Routes"
+      file: path=/etc/routes state=directory
+      become: yes
+    - copy: src="etc/routes/apnic_cn.tsv"
+            dest="/etc/routes/apnic_cn.tsv"
+      become: yes
+
+    - name: "Add Anyconnect helper"
+      copy: src="usr/bin/anyconnect"
+            dest="/usr/bin/anyconnect"
+            mode=755
+      become: yes
+
+    - debug: output.stdout
+    - debug: output.stderr

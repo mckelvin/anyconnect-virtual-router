@@ -1,0 +1,90 @@
+#!/bin/bash
+set -e
+TMP_GATEWAY_FILE=/tmp/old_gateway
+TMP_NETMASK_FILE=/tmp/old_netmask
+
+
+anyconnect_connect() {
+    # TODO: make sure Internet is available
+
+    if ! ([ -f /var/run/vpnagentd.pid ] && kill -0 `cat /var/run/vpnagentd.pid` 2>/dev/null); then
+        # Remove NAT to make Anyconnect happy
+        # http://stackoverflow.com/a/8239082/721331
+        sudo iptables -t nat -D POSTROUTING 1 2>/dev/null || true
+        sudo rm -rf /var/run/vpnagentd.pid
+        sudo /etc/init.d/vpnagentd start
+    fi
+
+    if [ ! -d /sys/class/net/cscotun0/ ]; then
+        # Backup old gatwway and netmask
+        OLD_ROUTER=`ip route show | grep '^default'`
+        OLD_GATEWAY=`echo $OLD_ROUTER | awk '{print $3}'`
+        OLD_NIC=`echo $OLD_ROUTER | awk '{print $5}'`
+        OLD_NETMASK=`ip route show | grep $OLD_NIC | grep -v default | awk '{print $1}'`
+        echo $OLD_GATEWAY > $TMP_GATEWAY_FILE
+        echo $OLD_NETMASK > $TMP_NETMASK_FILE
+
+        host=$1
+        user=$2
+        pass=$3
+
+        # 0. Flush iptables and connect
+        sudo iptables -F
+        printf "connect $host\n$user\n$pass" | /opt/cisco/anyconnect/bin/vpn -s
+
+        # 1. Clean all routes set by cscotun0
+        route | grep cscotun0 | awk '{print "route del -net "$1" netmask "$3}' | sudo sh
+
+        # 2. No DROP
+        sudo iptables-save | grep -v "cscotun0 -j DROP" | sudo iptables-restore
+
+        # 3. Use dev cscotun0 as default gateway, now all traffic goes through cscotun0
+        sudo ip route del default
+        sudo ip route add default dev cscotun0
+
+        # 4. Add chnroutes
+        cat /etc/routes/apnic_cn.tsv | \
+        awk -v gw="$OLD_GATEWAY" '{print "route add -net "$1" netmask "$2" gw " gw}' | sudo sh
+
+        # 5. Fix resolver
+        sudo cp /etc/resolv.conf.tmpl /etc/resolv.conf
+
+        # 6. Enable ICS
+        sudo iptables -t nat -A POSTROUTING -s $OLD_NETMASK ! -d $OLD_NETMASK -j MASQUERADE
+    fi
+}
+
+
+anyconnect_disconnect() {
+    if [ -d /sys/class/net/cscotun0/ ]; then
+        /opt/cisco/anyconnect/bin/vpn disconnect
+    fi
+
+    if [ ! -f $TMP_GATEWAY_FILE ]; then
+        >&2 echo "ERROR: $TMP_GATEWAY_FILE is not found! Please fix gateway yourself."
+        exit 1
+    fi
+
+    # 3. Use eth1 as default gateway, now all traffic goes through eth1
+    OLD_GATEWAY=`cat $TMP_GATEWAY_FILE`
+    cat /etc/routes/apnic_cn.tsv | \
+    awk '{print "route del -net "$1" netmask "$2}' | sudo sh
+    sudo ip route del default 2>/dev/null || true
+    sudo ip route add default via $OLD_GATEWAY
+    rm -rf $TMP_GATEWAY_FILE
+    rm -rf $TMP_NETMASK_FILE
+    sudo cp /etc/resolv.conf.tmpl /etc/resolv.conf
+}
+
+
+case $1 in
+    connect)
+        anyconnect_connect $2 $3 $4
+        ;;
+    disconnect)
+        anyconnect_disconnect
+        ;;
+    *)
+        echo "Usage:\n\t$0 connect server username password\n\t$0 disconnect"
+        exit 1
+esac
