@@ -30,6 +30,16 @@ anyconnect_connect() {
 
         # 0. Flush iptables and connect
         sudo iptables -F
+
+        # https://gist.github.com/stackia/783a824e80b74e45e5ee
+        for IP in `cat /etc/cn/spoofing_ips`
+        do
+          hexip=$(printf '%02X ' ${IP//./ }; echo)
+          #echo $hexip
+          iptables -I INPUT -p udp --sport 53 -m string --algo bm --hex-string "|$hexip|" --from 60 --to 180 -j DROP
+          iptables -I FORWARD -p udp --sport 53 -m string --algo bm --hex-string "|$hexip|" --from 60 --to 180 -j DROP
+        done
+
         printf "connect $host\n$user\n$pass" | /opt/cisco/anyconnect/bin/vpn -s
 
         # 1. Clean all routes set by cscotun0
@@ -43,7 +53,7 @@ anyconnect_connect() {
         sudo ip route add default dev cscotun0
 
         # 4. Add chnroutes
-        cat /etc/routes/apnic_cn.tsv | \
+        cat /etc/cn/apnic_cn_routes.tsv | \
         awk -v gw="$OLD_GATEWAY" '{print "route add -net "$1" netmask "$2" gw " gw}' | sudo sh
 
         # 5. Fix resolver
@@ -67,8 +77,8 @@ anyconnect_disconnect() {
 
     # 3. Use eth1 as default gateway, now all traffic goes through eth1
     OLD_GATEWAY=`cat $TMP_GATEWAY_FILE`
-    cat /etc/routes/apnic_cn.tsv | \
-    awk '{print "route del -net "$1" netmask "$2}' | sudo sh
+    cat /etc/cn/apnic_cn_routes.tsv | \
+    awk '{print "route del -net "$1" netmask "$2}' | sudo sh  || true
     sudo ip route del default 2>/dev/null || true
     sudo ip route add default via $OLD_GATEWAY
     rm -rf $TMP_GATEWAY_FILE

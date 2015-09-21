@@ -75,10 +75,10 @@
       become: yes
 
     - name: "Add APNIC CN Routes"
-      file: path=/etc/routes state=directory
+      file: path=/etc/cn state=directory
       become: yes
-    - copy: src="etc/routes/apnic_cn.tsv"
-            dest="/etc/routes/apnic_cn.tsv"
+    - copy: src="etc/cn/apnic_cn_routes.tsv"
+            dest="/etc/cn/apnic_cn_routes.tsv"
       become: yes
 
     - name: "Add Anyconnect helper"

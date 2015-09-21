@@ -27,7 +27,7 @@
 
 ## TODO
 
-- sync `provisioning/etc/routes/apnic_cn.tsv` with [chnroutes](https://github.com/fivesheep/chnroutes)
+- sync `provisioning/etc/cn/apnic_cn_routes.tsv` with [chnroutes](https://github.com/fivesheep/chnroutes)
 - sync `provisioning/etc/dnsmasq.d/*.conf` with [dnsmasq-china-list](https://github.com/felixonmars/dnsmasq-china-list)
 - Web pages for admin
 
