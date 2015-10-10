@@ -36,8 +36,8 @@ anyconnect_connect() {
         do
           hexip=$(printf '%02X ' ${IP//./ }; echo)
           #echo $hexip
-          iptables -I INPUT -p udp --sport 53 -m string --algo bm --hex-string "|$hexip|" --from 60 --to 180 -j DROP
-          iptables -I FORWARD -p udp --sport 53 -m string --algo bm --hex-string "|$hexip|" --from 60 --to 180 -j DROP
+          sudo iptables -I INPUT -p udp --sport 53 -m string --algo bm --hex-string "|$hexip|" --from 60 --to 180 -j DROP
+          sudo iptables -I FORWARD -p udp --sport 53 -m string --algo bm --hex-string "|$hexip|" --from 60 --to 180 -j DROP
         done
 
         printf "connect $host\n$user\n$pass" | /opt/cisco/anyconnect/bin/vpn -s
@@ -46,7 +46,7 @@ anyconnect_connect() {
         route | grep cscotun0 | awk '{print "route del -net "$1" netmask "$3}' | sudo sh
 
         # 2. No DROP
-        sudo iptables-save | grep -v "cscotun0 -j DROP" | sudo iptables-restore
+        sudo iptables-save | grep -v "cscotun0" | sudo iptables-restore
 
         # 3. Use dev cscotun0 as default gateway, now all traffic goes through cscotun0
         sudo ip route del default
@@ -77,6 +77,7 @@ anyconnect_disconnect() {
 
     # 3. Use eth1 as default gateway, now all traffic goes through eth1
     OLD_GATEWAY=`cat $TMP_GATEWAY_FILE`
+    OLD_NETMASK=`cat $TMP_NETMASK_FILE`
     cat /etc/cn/apnic_cn_routes.tsv | \
     awk '{print "route del -net "$1" netmask "$2}' | sudo sh  || true
     sudo ip route del default 2>/dev/null || true
@@ -84,6 +85,7 @@ anyconnect_disconnect() {
     rm -rf $TMP_GATEWAY_FILE
     rm -rf $TMP_NETMASK_FILE
     sudo cp /etc/resolv.conf.tmpl /etc/resolv.conf
+    sudo iptables -F
 }
 
 

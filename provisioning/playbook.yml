@@ -80,6 +80,9 @@
     - copy: src="etc/cn/apnic_cn_routes.tsv"
             dest="/etc/cn/apnic_cn_routes.tsv"
       become: yes
+    - copy: src="etc/cn/spoofing_ips"
+            dest="/etc/cn/spoofing_ips"
+      become: yes
 
     - name: "Add Anyconnect helper"
       copy: src="usr/bin/anyconnect"
