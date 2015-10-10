@@ -64,6 +64,7 @@ Vagrant.configure(2) do |config|
     vb.customize ['modifyvm', :id, '--nicpromisc2', 'allow-all']
     vb.customize ['modifyvm', :id, '--cpus', '1']
     vb.customize ['modifyvm', :id, '--memory', '512']
+    vb.customize ['modifyvm', :id, '--natnet1', '192.168.222.0/24']
   end
   #
   # View the documentation for the provider you are using for more
